@@ -241,7 +241,7 @@ function analyzeFallback(lang, code){
   return { summary, functions, hotspots };
 }
 
-function analyzeCppTree(tree, code){
+function analyzeCppTree(tree, code) {
   const root = tree.rootNode;
   let totalLoops = 0;
   let totalDecisions = 0;
@@ -249,31 +249,62 @@ function analyzeCppTree(tree, code){
   const functions = [];
   const hotspots = [];
 
+  function isTestCaseLoop(node){
+  // crude detection: check while loop with condition like 't--' or 'testcases--'
+  if(node.type === 'while_statement'){
+    const cond = node.childForFieldName('condition');
+    if(cond && /\b(t|testcases|tests)--/.test(cond.text)){
+      return true;
+    }
+  }
+  return false;
+}
+
   function walk(node, context){
-    context = context || { loopDepth: 0, currentFunction: null };
+    context = context || { loopDepth:0, currentFunction:null };
+
+    if(isTestCaseLoop(node)){
+      // Do NOT increase loop depth for test-case input loop
+      // Just walk its children with the same context
+      for(let i=0; i<node.namedChildCount; i++){
+        walk(node.namedChildren[i], context);
+      }
+      return;
+    }
+
     const type = node.type;
+    if (
+      type === 'for_statement' ||
+      type === 'while_statement' ||
+      type === 'do_statement' ||
+      type === 'range_based_for_statement'
+    ) {
+      context.loopDepth++;
+      maxLoopDepth = Math.max(maxLoopDepth, context.loopDepth);
+      totalLoops++;
 
-    if(type === 'for_statement' || type === 'while_statement' || type === 'do_statement' || type === 'range_based_for_statement'){
-      totalLoops += 1;
-      const depth = context.loopDepth + 1;
-      maxLoopDepth = Math.max(maxLoopDepth, depth);
-      context.loopDepth = depth;
-    }
-    if(type === 'if_statement' || type === 'switch_statement' || type === 'conditional_expression'){
-      totalDecisions += 1;
-      if(context.currentFunction) context.currentFunction.decisions += 1;
+      // Walk children with increased depth context
+      for(let i=0; i<node.namedChildCount; i++){
+        walk(node.namedChildren[i], context);
+      }
+      context.loopDepth--;
+      return;
     }
 
-    if(type === 'function_definition' || type === 'function_declarator'){
-      // try to get identifier child
-      const nameNode = node.namedChildren.find(n => n.type === 'identifier' || n.type === 'field_identifier');
+    if(type === 'if_statement' || type === 'switch_statement' || type === 'conditional_expression') {
+      totalDecisions++;
+      if(context.currentFunction) context.currentFunction.decisions++;
+    }
+
+    if(type === 'function_definition' || type === 'function_declarator') {
+      const nameNode = node.namedChildren.find(n=>n.type === 'identifier' || n.type === 'field_identifier');
       const fname = nameNode ? nameNode.text : `anon@${node.startPosition.row+1}`;
-      const fn = { name: fname, loc: { start: node.startPosition.row+1, end: node.endPosition.row+1 }, loops:0, decisions:0, cyclomatic:1, calls: [], selfRecursive:false };
+      const fn = { name: fname, loc: {start: node.startPosition.row+1, end: node.endPosition.row+1}, loops:0, decisions:0, cyclomatic:1, calls:[], selfRecursive:false };
       functions.push(fn);
-      // walk function body with this function context
-      node.namedChildren.forEach(child => walk(child, { loopDepth:0, currentFunction:fn }));
+      // reset loop depth to 0 for each function
+      node.namedChildren.forEach(child => walk(child, {loopDepth:0, currentFunction:fn}));
       fn.cyclomatic = 1 + fn.decisions;
-      const score = fn.loops*3 + fn.decisions*2 + (fn.selfRecursive?5:0) + Math.max(0, fn.cyclomatic-5);
+      const score = fn.loops*3 + fn.decisions*2 + (fn.selfRecursive ? 5 : 0) + Math.max(0, fn.cyclomatic-5);
       hotspots.push({ name: fn.name, score, at: `L${fn.loc.start}`, snippet: extractSnippet(code, fn.loc.start, fn.loc.end) });
       return;
     }
@@ -287,31 +318,34 @@ function analyzeCppTree(tree, code){
       }
     }
 
-    for(let i=0;i<node.namedChildCount;i++){
-      const child = node.namedChildren[i];
-      walk(child, { loopDepth: context.loopDepth, currentFunction: context.currentFunction });
+    for(let i=0;i<node.namedChildCount;i++) {
+      walk(node.namedChildren[i], context);
     }
   }
 
-  walk(root, { loopDepth:0, currentFunction:null });
+  walk(root, { loopDepth: 0, currentFunction: null });
 
-  // quick per-function refinement by scanning code lines of function body
-  functions.forEach(fn=>{
-    const bodyLines = code.split("\n").slice(fn.loc.start-1, fn.loc.end).join("\n");
-    fn.loops = (bodyLines.match(/\bfor\b|\bwhile\b/g)||[]).length;
-    fn.decisions = (bodyLines.match(/\bif\b|\bswitch\b|\?(?=\:)/g)||[]).length;
+  // Per-function refinement (optional, as before)
+  functions.forEach(fn => {
+    const bodyLines = code.split("\n").slice(fn.loc.start - 1, fn.loc.end).join("\n");
+    fn.loops = (bodyLines.match(/\bfor\b|\bwhile\b/g) || []).length;
+    fn.decisions = (bodyLines.match(/\bif\b|\bswitch\b|\?(?=\:)/g) || []).length;
     fn.cyclomatic = 1 + fn.decisions;
   });
 
-  hotspots.sort((a,b)=>b.score-a.score);
+  hotspots.sort((a, b) => b.score - a.score);
 
-  const time = maxLoopDepth === 0 ? "O(1) to O(N)" : (maxLoopDepth === 1 ? "O(N)" : (maxLoopDepth === 2 ? "O(N^2)" : `O(N^${maxLoopDepth})`));
+  // Improved time complexity formula: use actual max loop depth
+  const time = maxLoopDepth === 0 ? "O(1) to O(N)" :
+               (maxLoopDepth === 1 ? "O(N)" :
+                 (maxLoopDepth === 2 ? "O(N^2)" : `O(N^${maxLoopDepth})`));
   const space = /\bnew\b|std::vector|std::map|malloc\b/.test(code) ? "O(N) (allocations detected)" : "O(1)";
-  const summary = { time, space, maxLoopDepth, recursionCount: functions.filter(f=>f.selfRecursive).length, totalDecisions, totalLoops };
+  const summary = { time, space, maxLoopDepth, recursionCount: functions.filter(f => f.selfRecursive).length, totalDecisions, totalLoops };
 
   return { summary, functions, hotspots: hotspots.slice(0,8) };
 }
 
-function extractSnippet(code, startLine, endLine){
-  return code.split("\n").slice(startLine-1, Math.min(endLine, startLine+4)).join("\n");
+function extractSnippet(code, startLine, endLine) {
+  return code.split("\n").slice(startLine - 1, Math.min(endLine, startLine + 4)).join("\n");
 }
+
