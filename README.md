@@ -77,6 +77,9 @@ npm run preview
 ---
 
 ## 🖼️ Screenshots
+![Paste_Code](docs/screenshots/Paste_Code.png)
+![Analyze](docs/screenshots/Analyze.png)
+![Result](docs/screenshots/Result.png)
 
 | Paste Code | Analyze | Result |
 |------------|---------|--------|
