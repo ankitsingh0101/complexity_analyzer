@@ -77,13 +77,13 @@ npm run preview
 ---
 
 ## 🖼️ Screenshots
-![Paste_Code](docs/screenshots/Paste_Code.png)
+<!-- ![Paste_Code](docs/screenshots/Paste_Code.png)
 ![Analyze](docs/screenshots/Analyze.png)
-![Result](docs/screenshots/Result.png)
+![Result](docs/screenshots/Result.png) -->
 
 | Paste Code | Analyze | Result |
 |------------|---------|--------|
-| ![Paste Code](docs/screenshots/paste-code.png) | ![Analyze](docs/screenshots/analyze.png) | ![Result](docs/screenshots/result.png) |
+| ![Paste Code](docs/screenshots/Paste_Code.png.png) | ![Analyze](docs/screenshots/Analyze.png) | ![Result](docs/screenshots/Result.png) |
 
 *(Add your screenshots inside `docs/screenshots/` folder)*
 
