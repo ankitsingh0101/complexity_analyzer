@@ -83,7 +83,7 @@ npm run preview
 
 | Paste Code | Analyze | Result |
 |------------|---------|--------|
-| ![Paste Code](docs/screenshots/Paste_Code.png.png) | ![Analyze](docs/screenshots/Analyze.png) | ![Result](docs/screenshots/Result.png) |
+| ![Paste_Code](docs/screenshots/Paste_Code.png.png) | ![Analyze](docs/screenshots/Analyze.png) | ![Result](docs/screenshots/Result.png) |
 
 *(Add your screenshots inside `docs/screenshots/` folder)*
 
